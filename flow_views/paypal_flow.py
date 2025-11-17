@@ -3,19 +3,83 @@ import discord
 from discord.ext import commands
 import config 
 
-# --- Shared Views (used by ALL receiving flows) ---
+
+# --- New Modal for Closing and Logging Ticket ---
+class CloseTicketModal(discord.ui.Modal, title="Confirm Ticket Closure"):
+    def __init__(self, channel, flow_data, amount_sent, final_received, fee_amount):
+        super().__init__()
+        self.channel = channel
+        self.flow_data = flow_data
+        self.amount_sent = amount_sent
+        self.final_received = final_received
+        self.fee_amount = fee_amount
+
+    confirmation_input = discord.ui.TextInput(
+        label="Type 'CONFIRM' to close and log the ticket",
+        placeholder="CONFIRM",
+        required=True,
+        max_length=7
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        if self.confirmation_input.value.strip().upper() != "CONFIRM":
+            return await interaction.response.send_message("Closure cancelled. You must type 'CONFIRM'.", ephemeral=True)
+
+        # Acknowledge immediately (ephemeral)
+        await interaction.response.send_message(f"Ticket closure confirmed by {interaction.user.mention}. Logging and deleting channel...", ephemeral=True)
+        
+        # --- 1. LOG THE TRANSACTION ---
+        log_channel = self.channel.guild.get_channel(config.LOG_CHANNEL_ID)
+        
+        if log_channel:
+            # Create the Log Embed
+            
+            receiver_display = self.flow_data['receiver'].title()
+            crypto_coin = self.flow_data.get('crypto_coin')
+            
+            # Determine exchange description
+            if crypto_coin:
+                # Example: LTC to PayPal
+                exchange_desc = f"{crypto_coin} to {receiver_display}"
+            else:
+                # Example: PayPal to Zelle
+                exchange_desc = f"{self.flow_data['sender'].title()} to {receiver_display}"
+
+            log_embed = discord.Embed(
+                title="Exchange Complete",
+                description=f"A client successfully exchanged **${self.amount_sent:,.2f}** ({exchange_desc})",
+                color=discord.Color.green()
+            )
+            log_embed.add_field(name="Final Received", value=f"${self.final_received:,.2f} ({self.flow_data['currency']})", inline=True)
+            log_embed.add_field(name="Fee Deducted", value=f"${self.fee_amount:,.2f}", inline=True)
+            
+            # Use the channel's name as the creator context for simplicity
+            ticket_creator = self.channel.name.split('-')[1].title() if len(self.channel.name.split('-')) > 1 else self.channel.name
+            
+            log_embed.set_footer(text=f"Logged by: {interaction.user.name} | Creator: {ticket_creator}")
+            log_embed.timestamp = discord.utils.utcnow()
+
+            await log_channel.send(embed=log_embed)
+
+        # --- 2. DELETE THE CHANNEL ---
+        await self.channel.delete(reason=f"Ticket closed and logged by {interaction.user.name}")
+
 
 # View for Ticket Actions (Claim, Close, etc.)
 class TicketActionView(discord.ui.View):
-    def __init__(self, timeout=None):
+    def __init__(self, flow_data, amount_sent, final_received, fee_amount, timeout=None):
         super().__init__(timeout=timeout)
+        self.flow_data = flow_data
+        self.amount_sent = amount_sent
+        self.final_received = final_received
+        self.fee_amount = fee_amount
 
     @discord.ui.button(label="Claim", style=discord.ButtonStyle.green, emoji="🛡️")
     async def claim_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         channel = interaction.channel
         guild = interaction.guild
         
-        # Check if the ticket is already claimed (optional, but good practice)
+        # Check if the ticket is already claimed
         if channel.category_id == config.TICKET_CATEGORY_CLAIMED_ID:
             return await interaction.response.send_message("This ticket is already claimed.", ephemeral=True)
 
@@ -25,9 +89,9 @@ class TicketActionView(discord.ui.View):
             await channel.edit(category=claimed_category)
         
         # 2. Disable the Claim button and update the message
-        self.children[0].disabled = True # Disable the Claim button
+        self.children[0].disabled = True
         self.children[0].label = f"Claimed by {interaction.user.name}"
-        self.children[0].style = discord.ButtonStyle.secondary # Change color to gray
+        self.children[0].style = discord.ButtonStyle.secondary 
 
         await interaction.response.edit_message(view=self)
         
@@ -37,8 +101,15 @@ class TicketActionView(discord.ui.View):
 
     @discord.ui.button(label="Close", style=discord.ButtonStyle.red, emoji="🔒")
     async def close_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # ⚠️ Placeholder: Logic to close the channel
-        await interaction.response.send_message("Ticket will now close...", ephemeral=False)
+        # Launch the confirmation modal
+        modal = CloseTicketModal(
+            interaction.channel,
+            self.flow_data,
+            self.amount_sent,
+            self.final_received,
+            self.fee_amount
+        )
+        await interaction.response.send_modal(modal)
 
     @discord.ui.button(label="Reopen", style=discord.ButtonStyle.blurple, emoji="🔓")
     async def reopen_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -61,7 +132,7 @@ class ConfirmCancelView(discord.ui.View):
         # 1. SETUP TICKET PERMISSIONS
         guild = interaction.guild
         member = interaction.user
-        # 🟢 Use UNCLAIMED category for initial creation
+        # Use UNCLAIMED category for initial creation
         category = guild.get_channel(config.TICKET_CATEGORY_UNCLAIMED_ID) 
         
         overwrites = {
@@ -88,7 +159,7 @@ class ConfirmCancelView(discord.ui.View):
             ticket_embed.add_field(name="Amount Sent", value=f"${self.amount_sent:,.2f} ({self.flow_data['currency']})", inline=True)
             ticket_embed.add_field(name="Final Received", value=f"**${self.final_received:,.2f}**", inline=True)
             
-            # 🟢 Logic to display specific crypto coin (e.g., Crypto → LTC)
+            # Logic to display specific crypto coin (e.g., Crypto → LTC)
             exchange_type_value = f"{self.flow_data['receiver'].title()}"
 
             if self.flow_data.get('crypto_coin'):
@@ -111,7 +182,8 @@ class ConfirmCancelView(discord.ui.View):
             await ticket_channel.send(
                 content=f"@here New exchange ticket created by {member.mention}!", 
                 embed=ticket_embed,
-                view=TicketActionView() 
+                # Pass all transaction data to TicketActionView
+                view=TicketActionView(self.flow_data, self.amount_sent, self.final_received, self.fee_amount) 
             )
 
             # 4. ACKNOWLEDGE USER - EDITS THE EPHEMERAL SUMMARY MESSAGE
