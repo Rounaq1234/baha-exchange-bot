@@ -101,11 +101,11 @@ class MethodSelectionView(discord.ui.View):
     @discord.ui.select(
         placeholder="Select Option",
         options=[
-            discord.SelectOption(label="PayPal", value="paypal", description="9% or 25% Fee", emoji="🅿️"),
-            discord.SelectOption(label="CashApp", value="cashapp", description="9% Fee", emoji="💲"),
-            discord.SelectOption(label="ApplePay", value="applepay", description="9% Fee", emoji="🍎"),
-            discord.SelectOption(label="Venmo", value="venmo", description="9% Fee", emoji="🇻"),
-            discord.SelectOption(label="Zelle", value="zelle", description="9% Fee", emoji="💜"),
+            discord.SelectOption(label="PayPal", value="paypal", description="8% or 25% Fee", emoji="🅿️"),
+            discord.SelectOption(label="CashApp", value="cashapp", description="8% Fee", emoji="💲"),
+            discord.SelectOption(label="ApplePay", value="applepay", description="8% Fee", emoji="🍎"),
+            discord.SelectOption(label="Venmo", value="venmo", description="8% Fee", emoji="🇻"),
+            discord.SelectOption(label="Zelle", value="zelle", description="8% Fee", emoji="💜"),
         ]
     )
     async def select_method(self, interaction: discord.Interaction, select: discord.ui.Select):
@@ -126,4 +126,5 @@ class MethodSelectionView(discord.ui.View):
             content=content,
             view=next_view,
             ephemeral=True
+
         )
