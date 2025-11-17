@@ -27,6 +27,16 @@ TEST_GUILD_ID = 0
 TICKET_CATEGORY_UNCLAIMED_ID = 1439845355050242201  # ⚠️ Replace with your Unclaimed Category ID
 TICKET_CATEGORY_CLAIMED_ID = 1439845500160577627    # ⚠️ Replace with your Claimed Category ID
 
+# config.py
+
+# ... (other config) ...
+
+# --- TICKET LOGGING CONFIGURATION ---
+# REQUIRED: Replace with the ID of the channel where exchange logs will be sent.
+LOG_CHANNEL_ID = 1439984362077687818 # ⚠️ Replace with your Log Channel ID
+
+# ... (rest of fee configuration) ...
+
 # ... (rest of fee configuration) ...
 
 
@@ -47,4 +57,5 @@ FEE_RATES = {
     # Venmo Fees
     "venmo_standard": 0.08,  # 8% Fee for Standard transfer
     "venmo_instant": 0.15, # 15% Fee for Instant transfer
+
 }
