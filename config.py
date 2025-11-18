@@ -35,6 +35,26 @@ TICKET_CATEGORY_CLAIMED_ID = 1439845500160577627    # ⚠️ Replace with your C
 # REQUIRED: Replace with the ID of the channel where exchange logs will be sent.
 LOG_CHANNEL_ID = 1439984362077687818 # ⚠️ Replace with your Log Channel ID
 
+# config.py
+
+# ... (other config) ...
+
+# --- ROLE-BASED PING CONFIGURATION ---
+# IMPORTANT: Replace the placeholder IDs below with the actual Role IDs from your Discord server.
+EXCHANGER_ROLES = {
+    # Existing Roles
+    "paypal": 1439845835696505003,  # ID for the 'PayPal Exchanger' role
+    "crypto": 1439845857410289714,  # ID for the 'Crypto Exchanger' role
+    "cashapp": 1439845797679337482, # ID for the 'CashApp Exchanger' role
+    
+    # 🟢 NEW ROLES 
+    "zelle": 1439845912330637345,    # ID for the 'Zelle Exchanger' role
+    "venmo": 1439845878591520948,    # ID for the 'Venmo Exchanger' role
+    "applepay": 1440166173848240188, # ID for the 'Apple Pay Exchanger' role (Use 'applepay' as the key)
+}
+
+# ... (rest of configuration) ...
+
 # ... (rest of fee configuration) ...
 
 # ... (rest of fee configuration) ...
@@ -59,3 +79,4 @@ FEE_RATES = {
     "venmo_instant": 0.15, # 15% Fee for Instant transfer
 
 }
+
