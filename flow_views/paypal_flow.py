@@ -131,39 +131,49 @@ class ConfirmCancelView(discord.ui.View):
         # 🟢 CRITICAL FIX: DEFER THE INTERACTION IMMEDIATELY
         await interaction.response.defer() 
 
-        # 1. SETUP TICKET PERMISSIONS
+        # 1. SETUP TICKET VARIABLES
         guild = interaction.guild
         member = interaction.user
-        # Use UNCLAIMED category for initial creation
         category = guild.get_channel(config.TICKET_CATEGORY_UNCLAIMED_ID) 
         
+        # --- DYNAMIC PING LOGIC (Identify the Exchanger Role) ---
+        sender_key = self.flow_data['sender']
+        role_id = config.EXCHANGER_ROLES.get(sender_key)
+        
+        # Default overwrites: Deny @everyone, Allow Bot and Creator
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(read_messages=False), 
             member: discord.PermissionOverwrite(read_messages=True, send_messages=True),
             guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True),
         }
+        
+        # 🟢 Add specific Exchanger Role to Overwrites (Permissions)
+        exchanger_role = None
+        if role_id:
+            exchanger_role = guild.get_role(role_id)
+            if exchanger_role:
+                # Grant read and send permissions to the specific exchanger role
+                overwrites[exchanger_role] = discord.PermissionOverwrite(
+                    read_messages=True, 
+                    send_messages=True
+                )
+        # --- END DYNAMIC PING LOGIC SETUP ---
 
         try:
-            # 2. CREATE TICKET CHANNEL (in the UNCLAIMED category)
+            # 2. CREATE TICKET CHANNEL (Uses the updated 'overwrites' dictionary)
             ticket_channel_name = f"exchange-{member.name}-{self.flow_data['receiver']}".lower().replace(' ', '-')
             ticket_channel = await guild.create_text_channel(
                 ticket_channel_name,
                 category=category,
-                overwrites=overwrites
+                overwrites=overwrites # Uses the dictionary including the Exchanger Role
             )
 
-            # --- DYNAMIC PING LOGIC (USES SENDER PLATFORM) ---
-            sender_key = self.flow_data['sender'] # <--- UPDATED TO PING SENDER EXCHANGER
-            role_id = config.EXCHANGER_ROLES.get(sender_key)
-            
-            if role_id:
-                # Format the role mention string: <@&ROLE_ID>
-                ping_mention = f"<@&{role_id}>"
-                ping_content = f"{ping_mention} New exchange ticket created by {member.mention}! Required Exchanger: **{sender_key.title()}**"
+            # --- Final Ping Content ---
+            if exchanger_role:
+                ping_content = f"{exchanger_role.mention} New exchange ticket created by {member.mention}! Required Exchanger: **{sender_key.title()}**"
             else:
-                # Fallback if the sender type isn't mapped
                 ping_content = f"@here New exchange ticket created by {member.mention}!"
-            # --- END DYNAMIC PING LOGIC ---
+            # --------------------------
 
 
             # 3. Format and Send the TICKET EMBED with Actions
@@ -195,9 +205,8 @@ class ConfirmCancelView(discord.ui.View):
 
             # 4. SEND THE MESSAGE WITH THE DYNAMIC PING
             await ticket_channel.send(
-                content=ping_content, # Uses the new selective ping based on sender
+                content=ping_content,
                 embed=ticket_embed,
-                # Pass all transaction data to TicketActionView
                 view=TicketActionView(self.flow_data, self.amount_sent, self.final_received, self.fee_amount) 
             )
 
