@@ -5,9 +5,8 @@ from config import FEE_RATES
 
 # Import all flow views for routing
 from .paypal_flow import PayPalTypeView
-# OLD: from .crypto_flow import CryptoCurrencySelectionView
-# NEW: 
-from .crypto_flow import CryptoSelectionView
+# 🟢 CORRECTED IMPORT: Use the correct class name CryptoCoinView
+from .crypto_flow import CryptoCoinView 
 from .zelle_flow import ZelleTypeView 
 from .venmo_flow import VenmoTypeView
 
@@ -36,17 +35,16 @@ class ReceivingMethodView(discord.ui.View):
             next_view = PayPalTypeView(self.sender_method, self.account_type, receiving_method)
             content = f"You selected **{receiving_method.title()}** as your receiving method.\n\n**Please select your PayPal type:**"
             
-        # flow_views/start_view.py (Inside ReceivingMethodView.select_receiving_method)
-
         elif receiving_method == "crypto":
-          next_view = CryptoSelectionView(self.sender_method, self.account_type, receiving_method)
+            # 🟢 FIX: Use CryptoCoinView and pass flow data for the next step
+            # Note: CryptoCoinView needs self.sender_method and self.account_type to continue the flow
+            next_view = CryptoCoinView(self.sender_method, self.account_type, receiving_method)
  
-          default_fee = FEE_RATES.get("crypto_default", 0)
-
-          content = (
-        f"You selected **{receiving_method.title()}** as your receiving method (8% Fee or Min $3.00).\n\n"
-        f"**What Crypto Currency are you going to exchange?**" # Updated question
-    )
+            # Fee logic explanation is included in the content message
+            content = (
+                f"You selected **{receiving_method.title()}** as your receiving method (8% Fee or Min $3.00).\n\n"
+                f"**What Crypto Currency are you going to exchange?**"
+            )
             
         elif receiving_method == "zelle":
             next_view = ZelleTypeView(self.sender_method, self.account_type, receiving_method)
@@ -59,7 +57,7 @@ class ReceivingMethodView(discord.ui.View):
         else:
             return await interaction.response.send_message(f"Flow for {receiving_method.title()} is not fully built.", ephemeral=True)
 
-        # EDITS THE EPHEMERAL MESSAGE (No ephemeral=True here)
+        # EDITS THE EPHEMERAL MESSAGE 
         await interaction.response.edit_message(content=content, view=next_view)
 
 
@@ -93,7 +91,7 @@ class AccountTypeView(discord.ui.View):
             self.stop()
 
 
-# --- STEP 1: INITIAL METHOD SELECTION (CONSTANT PANEL FIX APPLIED HERE) ---
+# --- STEP 1: INITIAL METHOD SELECTION ---
 class MethodSelectionView(discord.ui.View):
     def __init__(self, timeout=None):
         super().__init__(timeout=timeout)
@@ -106,43 +104,38 @@ class MethodSelectionView(discord.ui.View):
             discord.SelectOption(label="ApplePay", value="applepay", description="9% Fee", emoji="🍎"),
             discord.SelectOption(label="Venmo", value="venmo", description="9% Fee", emoji="🇻"),
             discord.SelectOption(label="Zelle", value="zelle", description="9% Fee", emoji="💜"),
-            # 🟢 Added Crypto option
             discord.SelectOption(label="Crypto", value="crypto", description="Send Crypto to Receive Fiat", emoji="💎"), 
         ]
     )
+    # 🟢 CONSOLIDATED LOGIC: Using select_callback for all initial choices
     async def select_callback(self, interaction: discord.Interaction, select: discord.ui.Select):
-        selected_method = select.values[0]
-        
-        # 🟢 If user selected Crypto, start the Crypto flow
-        if selected_method == "crypto":
-            next_view = CryptoCoinView()
-            await interaction.response.edit_message(
-                content="You selected **Crypto**. Which cryptocurrency are you sending?",
-                view=next_view
-            )
-        
-        # --- Existing PayPal Flow (Example for sending PayPal) ---
-        elif selected_method == "paypal":
-            # Start the flow where PayPal is the SENDER (assuming this is your default flow)
-            next_view = PayPalTypeView(selected_method, "n/a", "n/a") 
-            await interaction.response.edit_message(
-                content=f"You selected **{selected_method.title()}**. Select your account type and receiving method:",
-                view=next_view
-            )
-        
-        # --- Add logic for other fiat methods (CashApp, Venmo, Zelle) here ---
-        
-        else:
-             await interaction.response.send_message(f"Selected {selected_method.title()}.", ephemeral=True)
-            
-    async def select_method(self, interaction: discord.Interaction, select: discord.ui.Select):
         sender_method = select.values[0]
-        
-        # The panel remains constant because we are NOT editing the original public message.
-        
-        if sender_method == "cashapp":
+
+        # Case 1: Start Crypto-to-Fiat Flow (Sender is Crypto, No Account Type needed)
+        if sender_method == "crypto":
+            # The 'sender' method is crypto, receiving method selection is the next step
+            next_view = ReceivingMethodView(sender_method, "adult_account") # Defaulting account type for simplicity
+            
+            content = (
+                f"You selected **{sender_method.title()}** as your sending method. "
+                f"No account type selection is needed for Crypto.\n\n"
+                f"**What payment method would you like to receive in return?**"
+            )
+            
+            await interaction.response.send_message(
+                content=content,
+                view=next_view,
+                ephemeral=True
+            )
+            return
+
+        # Case 2: Fiat Sender (Requires Account Type Selection for CashApp)
+        # This mirrors the logic you had in your removed select_method, initiating the ephemeral flow.
+        elif sender_method == "cashapp":
             next_view = AccountTypeView(sender_method)
             content = f"You selected **{sender_method}** as your sending method.\n\n**Please select your account type:**"
+        
+        # Case 3: Other Fiat Senders (Bypass Account Type, Go straight to Receiving Method)
         else:
             account_type = "adult_account" 
             next_view = ReceivingMethodView(sender_method, account_type)
@@ -153,6 +146,4 @@ class MethodSelectionView(discord.ui.View):
             content=content,
             view=next_view,
             ephemeral=True
-
         )
-
