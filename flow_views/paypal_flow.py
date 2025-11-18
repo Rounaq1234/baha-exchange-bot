@@ -54,6 +54,7 @@ class CloseTicketModal(discord.ui.Modal, title="Confirm Ticket Closure"):
             log_embed.add_field(name="Fee Deducted", value=f"${self.fee_amount:,.2f}", inline=True)
             
             # Use the channel's name as the creator context for simplicity
+            # Extracts the creator's name from a channel name like "exchange-username-paypal"
             ticket_creator = self.channel.name.split('-')[1].title() if len(self.channel.name.split('-')) > 1 else self.channel.name
             
             log_embed.set_footer(text=f"Logged by: {interaction.user.name} | Creator: {ticket_creator}")
@@ -150,6 +151,20 @@ class ConfirmCancelView(discord.ui.View):
                 overwrites=overwrites
             )
 
+            # --- DYNAMIC PING LOGIC ---
+            receiver_key = self.flow_data['receiver']
+            role_id = config.EXCHANGER_ROLES.get(receiver_key)
+            
+            if role_id:
+                # Format the role mention string: <@&ROLE_ID>
+                ping_mention = f"<@&{role_id}>"
+                ping_content = f"{ping_mention} New exchange ticket created by {member.mention}!"
+            else:
+                # Fallback if the receiver type isn't mapped
+                ping_content = f"@here New exchange ticket created by {member.mention}!"
+            # --- END DYNAMIC PING LOGIC ---
+
+
             # 3. Format and Send the TICKET EMBED with Actions
             ticket_embed = discord.Embed(
                 title=f"💸 New Exchange Request: {self.flow_data['sender'].title()} → {self.flow_data['receiver'].title()}",
@@ -163,10 +178,8 @@ class ConfirmCancelView(discord.ui.View):
             exchange_type_value = f"{self.flow_data['receiver'].title()}"
 
             if self.flow_data.get('crypto_coin'):
-                # Format: Crypto → LTC
                 exchange_type_value += f" → {self.flow_data['crypto_coin']}"
             else:
-                # Fallback for non-crypto methods (e.g., PayPal Balance)
                 exchange_type_value += f" ({self.flow_data['specific_type'].replace('_', ' ').title()})"
             
             exchange_type_value += f"\nFee: ${self.fee_amount:,.2f}"
@@ -179,14 +192,15 @@ class ConfirmCancelView(discord.ui.View):
             ticket_embed.set_footer(text=f"User ID: {member.id} | Ticket ID: {ticket_channel.id}")
 
 
+            # 4. SEND THE MESSAGE WITH THE DYNAMIC PING
             await ticket_channel.send(
-                content=f"@here New exchange ticket created by {member.mention}!", 
+                content=ping_content, # Uses the new selective ping
                 embed=ticket_embed,
                 # Pass all transaction data to TicketActionView
                 view=TicketActionView(self.flow_data, self.amount_sent, self.final_received, self.fee_amount) 
             )
 
-            # 4. ACKNOWLEDGE USER - EDITS THE EPHEMERAL SUMMARY MESSAGE
+            # 5. ACKNOWLEDGE USER 
             self.clear_items()
             await interaction.response.edit_message(
                 content=interaction.message.content + f"\n\n**✅ Transaction Confirmed.** A staff member has been notified and a ticket has been opened in {ticket_channel.mention}.",
