@@ -101,13 +101,40 @@ class MethodSelectionView(discord.ui.View):
     @discord.ui.select(
         placeholder="Select Option",
         options=[
-            discord.SelectOption(label="PayPal", value="paypal", description="8% or 25% Fee", emoji="🅿️"),
-            discord.SelectOption(label="CashApp", value="cashapp", description="8% Fee", emoji="💲"),
-            discord.SelectOption(label="ApplePay", value="applepay", description="8% Fee", emoji="🍎"),
-            discord.SelectOption(label="Venmo", value="venmo", description="8% Fee", emoji="🇻"),
-            discord.SelectOption(label="Zelle", value="zelle", description="8% Fee", emoji="💜"),
+            discord.SelectOption(label="PayPal", value="paypal", description="9% or 25% Fee", emoji="🅿️"),
+            discord.SelectOption(label="CashApp", value="cashapp", description="9% Fee", emoji="💰"),
+            discord.SelectOption(label="ApplePay", value="applepay", description="9% Fee", emoji="🍎"),
+            discord.SelectOption(label="Venmo", value="venmo", description="9% Fee", emoji="🇻"),
+            discord.SelectOption(label="Zelle", value="zelle", description="9% Fee", emoji="💜"),
+            # 🟢 Added Crypto option
+            discord.SelectOption(label="Crypto", value="crypto", description="Send Crypto to Receive Fiat", emoji="💎"), 
         ]
     )
+    async def select_callback(self, interaction: discord.Interaction, select: discord.ui.Select):
+        selected_method = select.values[0]
+        
+        # 🟢 If user selected Crypto, start the Crypto flow
+        if selected_method == "crypto":
+            next_view = CryptoCoinView()
+            await interaction.response.edit_message(
+                content="You selected **Crypto**. Which cryptocurrency are you sending?",
+                view=next_view
+            )
+        
+        # --- Existing PayPal Flow (Example for sending PayPal) ---
+        elif selected_method == "paypal":
+            # Start the flow where PayPal is the SENDER (assuming this is your default flow)
+            next_view = PayPalTypeView(selected_method, "n/a", "n/a") 
+            await interaction.response.edit_message(
+                content=f"You selected **{selected_method.title()}**. Select your account type and receiving method:",
+                view=next_view
+            )
+        
+        # --- Add logic for other fiat methods (CashApp, Venmo, Zelle) here ---
+        
+        else:
+             await interaction.response.send_message(f"Selected {selected_method.title()}.", ephemeral=True)
+            
     async def select_method(self, interaction: discord.Interaction, select: discord.ui.Select):
         sender_method = select.values[0]
         
@@ -128,3 +155,4 @@ class MethodSelectionView(discord.ui.View):
             ephemeral=True
 
         )
+
