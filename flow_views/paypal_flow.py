@@ -33,7 +33,6 @@ class CloseTicketModal(discord.ui.Modal, title="Confirm Ticket Closure"):
         
         if log_channel:
             # Create the Log Embed
-            
             receiver_display = self.flow_data['receiver'].title()
             crypto_coin = self.flow_data.get('crypto_coin')
             
@@ -53,7 +52,6 @@ class CloseTicketModal(discord.ui.Modal, title="Confirm Ticket Closure"):
             log_embed.add_field(name="Final Received", value=f"${self.final_received:,.2f} ({self.flow_data['currency']})", inline=True)
             log_embed.add_field(name="Fee Deducted", value=f"${self.fee_amount:,.2f}", inline=True)
             
-            # Use the channel's name as the creator context for simplicity
             # Extracts the creator's name from a channel name like "exchange-username-paypal"
             ticket_creator = self.channel.name.split('-')[1].title() if len(self.channel.name.split('-')) > 1 else self.channel.name
             
@@ -130,6 +128,9 @@ class ConfirmCancelView(discord.ui.View):
     @discord.ui.button(label="✔ Confirm", style=discord.ButtonStyle.success)
     async def confirm_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         
+        # 🟢 CRITICAL FIX: DEFER THE INTERACTION IMMEDIATELY
+        await interaction.response.defer() 
+
         # 1. SETUP TICKET PERMISSIONS
         guild = interaction.guild
         member = interaction.user
@@ -151,16 +152,16 @@ class ConfirmCancelView(discord.ui.View):
                 overwrites=overwrites
             )
 
-            # --- DYNAMIC PING LOGIC ---
-            receiver_key = self.flow_data['receiver']
-            role_id = config.EXCHANGER_ROLES.get(receiver_key)
+            # --- DYNAMIC PING LOGIC (USES SENDER PLATFORM) ---
+            sender_key = self.flow_data['sender'] # <--- UPDATED TO PING SENDER EXCHANGER
+            role_id = config.EXCHANGER_ROLES.get(sender_key)
             
             if role_id:
                 # Format the role mention string: <@&ROLE_ID>
                 ping_mention = f"<@&{role_id}>"
-                ping_content = f"{ping_mention} New exchange ticket created by {member.mention}!"
+                ping_content = f"{ping_mention} New exchange ticket created by {member.mention}! Required Exchanger: **{sender_key.title()}**"
             else:
-                # Fallback if the receiver type isn't mapped
+                # Fallback if the sender type isn't mapped
                 ping_content = f"@here New exchange ticket created by {member.mention}!"
             # --- END DYNAMIC PING LOGIC ---
 
@@ -194,15 +195,15 @@ class ConfirmCancelView(discord.ui.View):
 
             # 4. SEND THE MESSAGE WITH THE DYNAMIC PING
             await ticket_channel.send(
-                content=ping_content, # Uses the new selective ping
+                content=ping_content, # Uses the new selective ping based on sender
                 embed=ticket_embed,
                 # Pass all transaction data to TicketActionView
                 view=TicketActionView(self.flow_data, self.amount_sent, self.final_received, self.fee_amount) 
             )
 
-            # 5. ACKNOWLEDGE USER 
+            # 5. ACKNOWLEDGE USER - Use edit_original_response after deferring
             self.clear_items()
-            await interaction.response.edit_message(
+            await interaction.edit_original_response(
                 content=interaction.message.content + f"\n\n**✅ Transaction Confirmed.** A staff member has been notified and a ticket has been opened in {ticket_channel.mention}.",
                 view=self
             )
@@ -210,7 +211,7 @@ class ConfirmCancelView(discord.ui.View):
         except Exception as e:
             print(f"Error creating ticket: {e}")
             self.clear_items()
-            await interaction.response.edit_message(
+            await interaction.edit_original_response(
                 content=interaction.message.content + f"\n\n**❌ Error:** Could not create ticket channel. (Bot permission issue, check category ID/permissions).",
                 view=self
             )
