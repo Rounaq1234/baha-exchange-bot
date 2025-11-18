@@ -12,17 +12,22 @@ from flow_views.paypal_flow import AmountModal
 class FiatReceiverView(discord.ui.View):
     def __init__(self, crypto_coin, timeout=300):
         super().__init__(timeout=timeout)
-        # Set base flow data for AmountModal
+        # Set base flow data
         self.flow_data = {
-            "sender": "crypto", # General sender type
+            "sender": "crypto", 
             "account_type": "n/a", 
-            "crypto_coin": crypto_coin, # Specific coin for the ticket title/log
-            "fee_rate": config.FEE_RATES.get("crypto", 0.06),
-            "currency": "USD" # Default currency for receiving fiat (can be made selectable)
+            "crypto_coin": crypto_coin, # Specific coin stored here
+            "fee_rate": config.FEE_RATES.get("crypto", 0.05),
+            "currency": "USD" 
         }
+        
+        # 🟢 FIX: Set the placeholder dynamically in __init__
+        # self.children[0] accesses the first component in the view (the select menu)
+        self.children[0].placeholder = f"Select method to receive funds from {crypto_coin}..." 
 
     @discord.ui.select(
-        placeholder=f"Select method to receive funds from {self.flow_data['crypto_coin']}...",
+        # Note: The placeholder here is generic, but is immediately overridden in __init__
+        placeholder="Select method to receive funds...", 
         options=[
             discord.SelectOption(label="PayPal", value="paypal", emoji="🅿️"),
             discord.SelectOption(label="CashApp", value="cashapp", emoji="💰"),
@@ -36,7 +41,7 @@ class FiatReceiverView(discord.ui.View):
         
         # Update flow data with receiving method and specific type
         self.flow_data["receiver"] = fiat_method
-        self.flow_data["specific_type"] = "general" # General type for fiat receiver
+        self.flow_data["specific_type"] = "general" 
 
         await interaction.response.send_modal(AmountModal(self.flow_data))
 
@@ -55,13 +60,13 @@ class CryptoCoinView(discord.ui.View):
             discord.SelectOption(label="Ethereum (ETH)", value="ETH", emoji="🔷"),
             discord.SelectOption(label="Litecoin (LTC)", value="LTC", emoji="💨"),
             discord.SelectOption(label="Solana (SOL)", value="SOL", emoji="☀️"),
-            # Add more coins as needed
         ]
     )
     async def select_crypto_coin(self, interaction: discord.Interaction, select: discord.ui.Select):
         crypto_coin = select.values[0]
         
-        next_view = FiatReceiverView(crypto_coin)
+        # Passes the selected coin to the next view (FiatReceiverView)
+        next_view = FiatReceiverView(crypto_coin) 
         
         await interaction.response.edit_message(
             content=f"You selected **{crypto_coin}**. Now, select the method you want to **receive** the funds through:",
