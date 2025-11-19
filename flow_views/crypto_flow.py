@@ -32,11 +32,13 @@ class CryptoReceiverCoinView(discord.ui.View):
     async def select_receiver_coin(self, interaction: discord.Interaction, select: discord.ui.Select):
         # We don't defer because the next step is a modal (which uses a standard interaction response)
         
-        crypto_coin = select.values[0]
+        receiver_crypto_coin = select.values[0]
         
         # Update flow data
         self.flow_data["client_id"] = str(interaction.user.id)
-        self.flow_data["crypto_coin"] = crypto_coin
+        # FIX: Renamed key from 'crypto_coin' to 'receiver_crypto_coin' 
+        # to prevent downstream code from confusing the receiving coin with the sending method (PayPal).
+        self.flow_data["receiver_crypto_coin"] = receiver_crypto_coin 
         self.flow_data["specific_type"] = "receive_crypto"
         self.flow_data["fee_rate"] = config.FEE_RATES.get("crypto_receive", 0.08) # Assuming a fee for receiving
         self.flow_data["currency"] = "USD"
@@ -58,7 +60,8 @@ class FiatReceiverView(discord.ui.View):
         super().__init__(timeout=timeout)
         
         self.flow_data = flow_data
-        self.flow_data["crypto_coin"] = crypto_coin 
+        # Renamed key from 'crypto_coin' to 'sender_crypto_coin' for clarity and consistency
+        self.flow_data["sender_crypto_coin"] = crypto_coin 
         self.flow_data["fee_rate"] = config.FEE_RATES.get("crypto_send", 0.05) # Assuming a fee for sending
         self.flow_data["currency"] = "USD" 
         
@@ -119,6 +122,7 @@ class CryptoCoinView(discord.ui.View):
         self.flow_data["client_id"] = str(interaction.user.id)
         
         # Route to FiatReceiverView (Step 4 of Crypto SENDER flow)
+        # crypto_coin is passed to FiatReceiverView which will store it as 'sender_crypto_coin'
         next_view = FiatReceiverView(self.flow_data, crypto_coin) 
         
         await interaction.edit_original_response(
