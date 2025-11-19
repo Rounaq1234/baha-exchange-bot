@@ -1,4 +1,3 @@
-# flow_views/crypto_flow.py
 import discord
 from discord.ext import commands
 import config
@@ -10,23 +9,19 @@ from flow_views.paypal_flow import AmountModal
 # --- STEP 3: Receiving Method Selection (Crypto -> Fiat) ---
 # ==============================================================================
 class FiatReceiverView(discord.ui.View):
-    def __init__(self, crypto_coin, timeout=300):
+    def __init__(self, flow_data, crypto_coin, timeout=300):
         super().__init__(timeout=timeout)
-        # Set base flow data
-        self.flow_data = {
-            "sender": "crypto", 
-            "account_type": "n/a", 
-            "crypto_coin": crypto_coin, # Specific coin stored here
-            "fee_rate": config.FEE_RATES.get("crypto", 0.05),
-            "currency": "USD" 
-        }
         
-        # 🟢 FIX: Set the placeholder dynamically in __init__
-        # self.children[0] accesses the first component in the view (the select menu)
+        # Initialize full flow data based on previous steps and current selection
+        self.flow_data = flow_data
+        self.flow_data["crypto_coin"] = crypto_coin # Specific coin stored here
+        self.flow_data["fee_rate"] = config.FEE_RATES.get("crypto", 0.05)
+        self.flow_data["currency"] = "USD" 
+        
+        # Set the placeholder dynamically in __init__
         self.children[0].placeholder = f"Select method to receive funds from {crypto_coin}..." 
 
     @discord.ui.select(
-        # Note: The placeholder here is generic, but is immediately overridden in __init__
         placeholder="Select method to receive funds...", 
         options=[
             discord.SelectOption(label="PayPal", value="paypal", emoji="🅿️"),
@@ -43,6 +38,7 @@ class FiatReceiverView(discord.ui.View):
         self.flow_data["receiver"] = fiat_method
         self.flow_data["specific_type"] = "general" 
 
+        # Passes the flow data to the modal for amount input
         await interaction.response.send_modal(AmountModal(self.flow_data))
 
 
@@ -50,8 +46,17 @@ class FiatReceiverView(discord.ui.View):
 # --- STEP 2: Crypto Coin Selection (Starts the Crypto Flow) ---
 # ==============================================================================
 class CryptoCoinView(discord.ui.View):
-    def __init__(self, timeout=300):
+    # CORRECTED __init__ to accept all 3 positional arguments + timeout
+    def __init__(self, sender_method, account_type, receiving_method, timeout=300):
         super().__init__(timeout=timeout)
+        # Initialize the base flow data
+        self.flow_data = {
+            "sender": sender_method, 
+            "account_type": account_type, 
+            "receiver": receiving_method,
+            # client_id will be captured in the select callback below
+        }
+
 
     @discord.ui.select(
         placeholder="Select the Cryptocurrency you are sending...",
@@ -65,8 +70,11 @@ class CryptoCoinView(discord.ui.View):
     async def select_crypto_coin(self, interaction: discord.Interaction, select: discord.ui.Select):
         crypto_coin = select.values[0]
         
-        # Passes the selected coin to the next view (FiatReceiverView)
-        next_view = FiatReceiverView(crypto_coin) 
+        # Capture client_id here where the interaction object is available
+        self.flow_data["client_id"] = str(interaction.user.id)
+        
+        # Passes the complete flow data and the selected coin to the next view (FiatReceiverView)
+        next_view = FiatReceiverView(self.flow_data, crypto_coin) 
         
         await interaction.response.edit_message(
             content=f"You selected **{crypto_coin}**. Now, select the method you want to **receive** the funds through:",
