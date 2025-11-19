@@ -34,7 +34,7 @@ class ReceivingMethodView(discord.ui.View):
             content = f"You selected **{receiving_method.title()}** as your receiving method.\n\n**Please select your PayPal type:**"
             
         elif receiving_method == "crypto":
-            # FIX: Ensure CryptoCoinView is initialized with 3 positional arguments
+            # Pass all required flow parameters to CryptoCoinView
             next_view = CryptoCoinView(self.sender_method, self.account_type, receiving_method)
 
             # Fee logic explanation is included in the content message
