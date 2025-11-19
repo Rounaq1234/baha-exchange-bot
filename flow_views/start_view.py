@@ -26,6 +26,9 @@ class ReceivingMethodView(discord.ui.View):
         ]
     )
     async def select_receiving_method(self, interaction: discord.Interaction, select: discord.ui.Select):
+        # FIX: Defer immediately to prevent the "Unknown interaction" 404 error
+        await interaction.response.defer()
+
         receiving_method = select.values[0]
 
         # ROUTING LOGIC
@@ -34,10 +37,8 @@ class ReceivingMethodView(discord.ui.View):
             content = f"You selected **{receiving_method.title()}** as your receiving method.\n\n**Please select your PayPal type:**"
             
         elif receiving_method == "crypto":
-            # Pass all required flow parameters to CryptoCoinView
             next_view = CryptoCoinView(self.sender_method, self.account_type, receiving_method)
 
-            # Fee logic explanation is included in the content message
             content = (
                 f"You selected **{receiving_method.title()}** as your receiving method (8% Fee or Min $3.00).\n\n"
                 f"**What Crypto Currency are you going to exchange?**"
@@ -52,10 +53,11 @@ class ReceivingMethodView(discord.ui.View):
             content = f"You selected **{receiving_method.title()}** as your receiving method.\n\n**Please select the Venmo transfer speed:**"
             
         else:
-            return await interaction.response.send_message(f"Flow for {receiving_method.title()} is not fully built.", ephemeral=True)
+            # Use followup for deferred interaction
+            return await interaction.followup.send(f"Flow for {receiving_method.title()} is not fully built.", ephemeral=True)
 
-        # EDITS THE EPHEMERAL MESSAGE 
-        await interaction.response.edit_message(content=content, view=next_view)
+        # Since we deferred, use edit_original_response instead of edit_message
+        await interaction.edit_original_response(content=content, view=next_view)
 
 
 # --- STEP 2: ACCOUNT TYPE SELECTION ---
@@ -72,17 +74,21 @@ class AccountTypeView(discord.ui.View):
         ]
     )
     async def select_account_type(self, interaction: discord.Interaction, select: discord.ui.Select):
+        # FIX: Defer immediately to prevent the "Unknown interaction" 404 error
+        await interaction.response.defer()
+        
         account_type = select.values[0]
 
         if account_type == "adult_account":
             next_view = ReceivingMethodView(self.sender_method, account_type)
-            # EDITS THE EPHEMERAL MESSAGE (No ephemeral=True here)
-            await interaction.response.edit_message(
-                content=f"You selected **{self.sender_method} ({account_type.replace('_', ' ').title()})**.\n\n**What payment method would you like to receive in return?**",
+            # Use edit_original_response since we deferred
+            await interaction.edit_original_response(
+                content=f"You selected **{self.sender_method.title()} ({account_type.replace('_', ' ').title()})**.\n\n**What payment method would you like to receive in return?**",
                 view=next_view
             )
         else:
-            await interaction.response.send_message(
+            # If sending a new message, use followup after deferring
+            await interaction.followup.send(
                 "Verification is required for Under 18 accounts. Transaction cancelled.", ephemeral=True
             )
             self.stop()
@@ -104,21 +110,19 @@ class MethodSelectionView(discord.ui.View):
             discord.SelectOption(label="Crypto", value="crypto", description="Send Crypto to Receive Fiat", emoji="💎"), 
         ]
     )
-    # CONSOLIDATED LOGIC: Using select_callback for all initial choices
     async def select_callback(self, interaction: discord.Interaction, select: discord.ui.Select):
         sender_method = select.values[0]
 
-        # Case 1: Start Crypto-to-Fiat Flow (Sender is Crypto, No Account Type needed)
+        # Case 1: Crypto Sender (Go straight to Receiving Method View)
         if sender_method == "crypto":
-            # The 'sender' method is crypto, receiving method selection is the next step
-            next_view = ReceivingMethodView(sender_method, "adult_account") # Defaulting account type for simplicity
+            next_view = ReceivingMethodView(sender_method, "adult_account") 
             
             content = (
-                f"You selected **{sender_method.title()}** as your sending method. "
-                f"No account type selection is needed for Crypto.\n\n"
+                f"You selected **{sender_method.title()}** as your sending method.\n\n"
                 f"**What payment method would you like to receive in return?**"
             )
             
+            # This is the initial response, use send_message
             await interaction.response.send_message(
                 content=content,
                 view=next_view,
@@ -126,16 +130,16 @@ class MethodSelectionView(discord.ui.View):
             )
             return
 
-        # Case 2: Fiat Sender (Requires Account Type Selection for CashApp)
+        # Case 2: CashApp Sender (Requires Account Type Selection - moves to Step 2)
         elif sender_method == "cashapp":
             next_view = AccountTypeView(sender_method)
-            content = f"You selected **{sender_method}** as your sending method.\n\n**Please select your account type:**"
+            content = f"You selected **{sender_method.title()}** as your sending method.\n\n**Please select your account type:**"
         
-        # Case 3: Other Fiat Senders (Bypass Account Type, Go straight to Receiving Method)
+        # Case 3: Other Fiat Senders (Bypass Account Type, go to Step 3)
         else:
             account_type = "adult_account" 
             next_view = ReceivingMethodView(sender_method, account_type)
-            content = f"You selected **{sender_method} ({account_type.replace('_', ' ').title()})**.\n\n**What payment method would you like to receive in return?**"
+            content = f"You selected **{sender_method.title()} ({account_type.replace('_', ' ').title()})**.\n\n**What payment method would you like to receive in return?**"
 
         # Start the new flow as the initial EPHEMERAL response.
         await interaction.response.send_message(
