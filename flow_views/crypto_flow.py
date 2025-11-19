@@ -1,20 +1,65 @@
 import discord
 from discord.ext import commands
 import config
-# NOTE: Assumes AmountModal exists in flow_views/paypal_flow.py
 from flow_views.paypal_flow import AmountModal 
 
 
 # ==============================================================================
-# --- STEP 4: Fiat Receiver Selection (After Crypto Coin is chosen) ---
+# --- NEW: STEP 3.5 (RECEIVER = CRYPTO): Coin Selection for receiving Crypto ---
+# This class handles the PayPal -> Crypto, Zelle -> Crypto, etc. flow.
+# ==============================================================================
+class CryptoReceiverCoinView(discord.ui.View):
+    """
+    Selects the specific crypto coin the client WANTS TO RECEIVE.
+    """
+    def __init__(self, sender_method, account_type, receiving_method, timeout=300):
+        super().__init__(timeout=timeout)
+        self.flow_data = {
+            "sender": sender_method, 
+            "account_type": account_type, 
+            "receiver": receiving_method,
+        }
+
+    @discord.ui.select(
+        placeholder="Select the Cryptocurrency you want to RECEIVE...",
+        options=[
+            discord.SelectOption(label="Bitcoin (BTC)", value="BTC", emoji="🪙"),
+            discord.SelectOption(label="Ethereum (ETH)", value="ETH", emoji="🔷"),
+            discord.SelectOption(label="Litecoin (LTC)", value="LTC", emoji="💨"),
+            discord.SelectOption(label="Solana (SOL)", value="SOL", emoji="☀️"),
+        ]
+    )
+    async def select_receiver_coin(self, interaction: discord.Interaction, select: discord.ui.Select):
+        # We don't defer because the next step is a modal (which uses a standard interaction response)
+        
+        crypto_coin = select.values[0]
+        
+        # Update flow data
+        self.flow_data["client_id"] = str(interaction.user.id)
+        self.flow_data["crypto_coin"] = crypto_coin
+        self.flow_data["specific_type"] = "receive_crypto"
+        self.flow_data["fee_rate"] = config.FEE_RATES.get("crypto_receive", 0.08) # Assuming a fee for receiving
+        self.flow_data["currency"] = "USD"
+        
+        # The next step is always the AmountModal, asking for the fiat amount they are SENDING
+        await interaction.response.send_modal(AmountModal(self.flow_data))
+
+
+# ==============================================================================
+# --- STEP 4 (SENDER = CRYPTO): Fiat Receiver Selection ---
+# This path is used for: Crypto -> PayPal, Crypto -> Zelle, etc.
 # ==============================================================================
 class FiatReceiverView(discord.ui.View):
+    """
+    Selects the final fiat method for receiving funds after crypto is chosen.
+    (Used only in Crypto SENDER flow)
+    """
     def __init__(self, flow_data, crypto_coin, timeout=300):
         super().__init__(timeout=timeout)
         
         self.flow_data = flow_data
         self.flow_data["crypto_coin"] = crypto_coin 
-        self.flow_data["fee_rate"] = config.FEE_RATES.get("crypto", 0.05)
+        self.flow_data["fee_rate"] = config.FEE_RATES.get("crypto_send", 0.05) # Assuming a fee for sending
         self.flow_data["currency"] = "USD" 
         
         if self.children and isinstance(self.children[0], discord.ui.Select):
@@ -31,29 +76,30 @@ class FiatReceiverView(discord.ui.View):
         ]
     )
     async def select_fiat_receiver(self, interaction: discord.Interaction, select: discord.ui.Select):
-        # Sending a modal is the first and only response, so we do not defer here.
         fiat_method = select.values[0]
         
         self.flow_data["receiver"] = fiat_method
         self.flow_data["specific_type"] = "general" 
 
-        # Passes the flow data to the modal for amount input
         await interaction.response.send_modal(AmountModal(self.flow_data))
 
 
 # ==============================================================================
-# --- STEP 3.5: Crypto Coin Selection ---
+# --- STEP 3.5 (SENDER = CRYPTO): Crypto Coin Selection for sending Crypto ---
+# This path is used for: Crypto -> PayPal, Crypto -> Zelle, etc.
 # ==============================================================================
 class CryptoCoinView(discord.ui.View):
+    """
+    Allows the user to select the specific crypto coin they are SENDING.
+    (Used only in Crypto SENDER flow)
+    """
     def __init__(self, sender_method, account_type, receiving_method, timeout=300):
-        # FIX: Correctly accept all flow data arguments
         super().__init__(timeout=timeout)
         self.flow_data = {
             "sender": sender_method, 
             "account_type": account_type, 
             "receiver": receiving_method,
         }
-
 
     @discord.ui.select(
         placeholder="Select the Cryptocurrency you are sending...",
@@ -65,16 +111,16 @@ class CryptoCoinView(discord.ui.View):
         ]
     )
     async def select_crypto_coin(self, interaction: discord.Interaction, select: discord.ui.Select):
-        # FIX: Defer the interaction immediately to prevent timeout (404 Unknown interaction)
+        # Defer the interaction immediately to prevent timeout
         await interaction.response.defer()
         
         crypto_coin = select.values[0]
         
         self.flow_data["client_id"] = str(interaction.user.id)
         
+        # Route to FiatReceiverView (Step 4 of Crypto SENDER flow)
         next_view = FiatReceiverView(self.flow_data, crypto_coin) 
         
-        # Since we deferred, use edit_original_response
         await interaction.edit_original_response(
             content=f"You selected **{crypto_coin}**. Now, select the method you want to **receive** the funds through:",
             view=next_view
