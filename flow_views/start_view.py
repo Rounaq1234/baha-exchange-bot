@@ -1,11 +1,9 @@
-# flow_views/start_view.py
 import discord
 from discord.ext import commands
 from config import FEE_RATES
 
 # Import all flow views for routing
 from .paypal_flow import PayPalTypeView
-# 🟢 CORRECTED IMPORT: Use the correct class name CryptoCoinView
 from .crypto_flow import CryptoCoinView 
 from .zelle_flow import ZelleTypeView 
 from .venmo_flow import VenmoTypeView
@@ -36,10 +34,9 @@ class ReceivingMethodView(discord.ui.View):
             content = f"You selected **{receiving_method.title()}** as your receiving method.\n\n**Please select your PayPal type:**"
             
         elif receiving_method == "crypto":
-            # 🟢 FIX: Use CryptoCoinView and pass flow data for the next step
-            # Note: CryptoCoinView needs self.sender_method and self.account_type to continue the flow
+            # FIX: Ensure CryptoCoinView is initialized with 3 positional arguments
             next_view = CryptoCoinView(self.sender_method, self.account_type, receiving_method)
- 
+
             # Fee logic explanation is included in the content message
             content = (
                 f"You selected **{receiving_method.title()}** as your receiving method (8% Fee or Min $3.00).\n\n"
@@ -107,7 +104,7 @@ class MethodSelectionView(discord.ui.View):
             discord.SelectOption(label="Crypto", value="crypto", description="Send Crypto to Receive Fiat", emoji="💎"), 
         ]
     )
-    # 🟢 CONSOLIDATED LOGIC: Using select_callback for all initial choices
+    # CONSOLIDATED LOGIC: Using select_callback for all initial choices
     async def select_callback(self, interaction: discord.Interaction, select: discord.ui.Select):
         sender_method = select.values[0]
 
@@ -130,7 +127,6 @@ class MethodSelectionView(discord.ui.View):
             return
 
         # Case 2: Fiat Sender (Requires Account Type Selection for CashApp)
-        # This mirrors the logic you had in your removed select_method, initiating the ephemeral flow.
         elif sender_method == "cashapp":
             next_view = AccountTypeView(sender_method)
             content = f"You selected **{sender_method}** as your sending method.\n\n**Please select your account type:**"
